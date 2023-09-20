@@ -26,6 +26,7 @@ import System.Console.ANSI qualified as Terminal
 import System.Console.Terminal.Size (Window)
 import System.Environment qualified as Environment
 import System.IO.Error qualified as IOError
+import System.Posix.Signals qualified as Signals
 import System.Process.Typed qualified as Process
 import Type.Strict qualified as StrictType
 
@@ -115,6 +116,13 @@ data ProcessState a = MkProcessState
 
 monitorHandle :: forall a. (StrictType.Strict (UpdaterState a), NOMInput a) => Config -> Handle -> IO NOMV1State
 monitorHandle config input_handle = withParser @a \streamParser -> do
+  -- Set up signal handler for restoring cursor
+  let restoreCursor = do
+        Terminal.hShowCursor outputHandle
+        ByteString.hPut outputHandle "\n"
+  _ <- Signals.installHandler Signals.sigINT (Signals.CatchOnce restoreCursor) Nothing
+  _ <- Signals.installHandler Signals.sigTERM (Signals.CatchOnce restoreCursor) Nothing
+
   finalState <-
     do
       Terminal.hHideCursor outputHandle
